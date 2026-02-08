@@ -30,7 +30,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
         args_size = args_str.size();
     } 
     else{
-        std::cout << "serialize request error!" << std::endl;
+        controller->SetFailed("serialize request error!");
         return;
     }
 
@@ -48,7 +48,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
     }
     else 
     {
-        std::cout << "serialize rpc header error!" << std::endl;
+        controller->SetFailed("serialize rpc header error!");
         return;
     }
 
@@ -71,9 +71,9 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
     // 创建套接字
     int clientfd = socket(AF_INET, SOCK_STREAM, 0);
     if (clientfd == -1) 
-    {
-        std::cout << "create socket error! errno: " << errno << std::endl;
-        exit(EXIT_FAILURE);
+    {   
+        controller->SetFailed("create socket error! errno: " + std::to_string(errno));
+        return;
     }
 
     // 读取配置文件中的ip和port
@@ -88,16 +88,16 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
 
     // 连接到服务器
     if (connect(clientfd, (sockaddr*)&server_addr, sizeof(server_addr)) == -1)
-    {
-        std::cout << "connect socket error! errno: " << errno << std::endl;
+    {   
+        controller->SetFailed("connect error! errno: " + std::to_string(errno));
         close(clientfd);
-        exit(EXIT_FAILURE);
+        return;
     }
 
     // 发送rpc请求（阻塞的）
     if (send(clientfd, send_rpc_str.c_str(), send_rpc_str.size(), 0) == -1)
     {
-        std::cout << "send error! errno: " << errno << std::endl;
+        controller->SetFailed("send error! errno: " + std::to_string(errno));
         close(clientfd);
         return;
     }
@@ -107,7 +107,7 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
     int recv_size = 0;
     if ((recv_size = recv(clientfd, recv_buf, 1024, 0)) == -1)
     {
-        std::cout << "recv error! errno: " << errno << std::endl;
+        controller->SetFailed("recv error! errno: " + std::to_string(errno));
         close(clientfd);
         return;
     }
@@ -116,8 +116,8 @@ void MprpcChannel::CallMethod(const google::protobuf::MethodDescriptor* method,
     // std::string response_str(recv_buf, 0, recv_size);   // recv_buf遇到'\0'就结束
     // if (!response->ParseFromString(response_str))
     if (!response->ParseFromArray(recv_buf, recv_size))
-    {
-        std::cout << "parse error! response_str: " << recv_buf << std::endl;
+    {   
+        controller->SetFailed("parse error! response_str: " + std::string(recv_buf, 0, recv_size));
         close(clientfd); 
         return;
     }
