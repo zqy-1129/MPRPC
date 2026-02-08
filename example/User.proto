@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package fixbug;
+
+// 要将这个进行Service的处理必须添加这个
+option cc_generic_services = true;
+
+message ResultCode
+{
+    int32 errcode = 1;
+    bytes errmsg = 2;
+}
+
+// Login
+message LoginRequest
+{
+    bytes name = 1;
+    bytes pwd = 2;
+}
+
+message LoginResponse
+{
+    ResultCode result = 1;
+    bool success = 2;
+}
+
+/// 
+/// UserServiceRpc provides user-related RPC methods such as login.
+///
+service UserServiceRpc 
+{   
+    // 方法的定义
+    /// 
+    /// Login authenticates a user with the provided credentials and returns the result.
+    ///
+    rpc Login(LoginRequest) returns(LoginResponse);
+    
+    /// 
+    /// Register creates a new user account with the provided details and returns the result.
+    ///
+    rpc Register(RegisterRequest) returns(RegisterResponse);
+
+}
+
+// Register
+message RegisterRequest
+{
+    uint32 id = 1;
+    bytes name = 2;
+    bytes pwd = 3;
+}
+
+message RegisterResponse
+{
+    ResultCode result = 1;
+    bool success = 2;
+}

@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package fixbug; //声明了代码所在的包（对于c++来说是namespace）
+
+option cc_generic_services = true;  // 必须加这个对应的service类才会生成
+
+message ResponseCode
+{
+    int32 errcode = 1;
+    bytes errmsg = 2;
+}
+
+// 登录消息类型 name  pwd
+message LoginRequest
+{
+    bytes name = 1; // 这里的数字表示的是字段几
+    bytes pwd = 2;
+}
+
+// 定义登录响应消息类型
+message LoginResponse
+{
+    ResponseCode result = 1;
+    bool success = 2;
+}
+
+message GetFriendListsRequest
+{
+    uint32 userid = 1;
+}
+
+message User
+{
+    bytes name = 1;
+    uint32 age = 2;
+    enum Sex
+    {
+        MAN = 0;
+        WOMAN = 1;
+    }
+    Sex sex = 3;
+}
+
+message GetFriendListsResponse 
+{
+    ResponseCode result = 1;
+    repeated User users = 2; // 这就是列表类型
+}
+
+///
+/// UserServiceRpc provides user-related RPC methods such as login and retrieving friend lists.
+///
+service UserServiceRpc 
+{
+    ///
+    /// Login authenticates a user with the provided credentials and returns the login result.
+    ///
+    rpc Login(LoginRequest) returns(LoginResponse);
+    ///
+    /// GetFriendLists retrieves the list of friends for the specified user.
+    ///
+    rpc GetFriendLists(GetFriendListsRequest) returns(GetFriendListsResponse);
+}
+
+/*
+    编译得到对应的类代码
+    protoc test.proto --cpp_out=./
+    将该类于源代码进行一起的编译，还需要包含protobuf的库 -lprotobuf
+*/
