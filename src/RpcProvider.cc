@@ -1,6 +1,8 @@
 #include "RpcProvider.h"
 #include "MprpcApplication.h"
 #include "RpcHeader.pb.h"
+#include "RpcLogger.h"
+#include "Zookeeperutil.h"
 
 /**
  * service_name -> service描述
@@ -18,7 +20,7 @@ void RpcProvider::NotifyService(google::protobuf::Service *service)
     // 获取服务对象服务的方法的数量
     int methodCnt = pserviceDesc->method_count();
 
-    std::cout << "service name: " << service_name << std::endl;
+    LOG_INFO("service name: %s", service_name.c_str());
 
     for (int i = 0; i < methodCnt; i++) 
     {   
@@ -26,7 +28,7 @@ void RpcProvider::NotifyService(google::protobuf::Service *service)
         const google::protobuf::MethodDescriptor* pmethodDesc = pserviceDesc->method(i);
         std::string method_name = pmethodDesc->name();
         service_info.m_methodMap.insert({method_name, pmethodDesc});
-        std::cout << "method name: " << method_name << std::endl;
+        LOG_INFO("method name: %s", method_name.c_str());
     }
 
     service_info.m_service = service;
@@ -49,7 +51,27 @@ void RpcProvider::Run()
     // 设置muduo库的工作线程数量
     server.setThreadNum(4);
 
-    std::cout << "RpcProvider start service at ip: " << ip << " " << port << std::endl;
+    ZkClient zkCli;
+    zkCli.Start();
+    // 把当前rpc服务节点的信息（ip、port、service_name）注册到zk上，让rpc客户端可以从zk上发现服务
+    for (const auto& sp : m_serviceMap)
+    {   
+        // service_name是永久节点，method_name是临时节点
+        std::string service_path = "/" + sp.first;  // /UserService
+        zkCli.Create(service_path.c_str(), nullptr, 0);
+        // service_path += "/method_name";
+        for (const auto& mp : sp.second.m_methodMap)
+        {
+            std::string method_path = service_path + "/" + mp.first;  // /UserService/Login
+            char method_path_data[128] = {0};
+            // 存储的是rpc服务节点的ip、port等信息，方便rpc客户端直接调用
+            sprintf(method_path_data, "%s:%d", ip.c_str(), port);
+            zkCli.Create(method_path.c_str(), method_path_data, strlen(method_path_data), ZOO_EPHEMERAL);
+            LOG_INFO("Register service: %s, method: %s to Zookeeper!", sp.first.c_str(), mp.first.c_str());
+        }
+    }
+
+    LOG_INFO("RpcProvider start service at ip: %s, port: %d", ip.c_str(), port);
 
     // 启动网络服务
     server.start();
@@ -76,7 +98,7 @@ void RpcProvider::SendRpcResponse(const muduo::net::TcpConnectionPtr& conn, goog
     } 
     else 
     {
-        std::cout << "Serialize response_str error!" << std::endl;
+        LOG_ERROR("Serialize response_str error!");
     }
 
 }
@@ -114,7 +136,7 @@ void RpcProvider::OnMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net
     else 
     {
         // 数据头反序列化失败
-        std::cout << "rpc_header_str: " << rpc_header_str << "parse error!" << std::endl; 
+        LOG_ERROR("rpc_header_str: %s parse error!", rpc_header_str.c_str());
         return;
     }
 
@@ -134,14 +156,14 @@ void RpcProvider::OnMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net
     auto it = m_serviceMap.find(service_name);
     if (it == m_serviceMap.end())
     {
-        std::cout << service_name << "is not exist!" << std::endl;
+        LOG_ERROR("%s is not exist!", service_name.c_str());
         return;
     }
 
     auto mit = it->second.m_methodMap.find(method_name);
     if (mit == it->second.m_methodMap.end())
     {
-        std::cout << service_name << ":" << method_name << "is not exist!" << std::endl;
+        LOG_ERROR("%s : %s is not exist!", service_name.c_str(), method_name.c_str());
         return;
     }
 
@@ -152,7 +174,7 @@ void RpcProvider::OnMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net
     google::protobuf::Message *request = service->GetRequestPrototype(method).New();
     if (!request->ParseFromString(args_str))
     {
-        std::cout << "request pasre error! content:" << args_str << std::endl;
+        LOG_ERROR("request pasre error! content: %s", args_str.c_str());
     }
     google::protobuf::Message *response = service->GetResponsePrototype(method).New();
 
